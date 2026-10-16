@@ -23,7 +23,7 @@ REB_UI_TIDS_TMP=$REB_DIR/Re.burnout-mode.ui-tids.tmp
 REB_TOP_CPU_FILE=/dev/.bk-reburnout-top-cpu
 REB_TOP_CPU_TMP=/dev/.bk-reburnout-top-cpu.tmp
 REB_TOP_CPU_SORTED=/dev/.bk-reburnout-top-cpu.sorted
-REB_INTERVAL=5
+REB_INTERVAL=15
 REB_ENTER_SAMPLES=6
 REB_EXIT_SAMPLES=12
 REB_AUTO_DELAY_SAMPLES=24
@@ -106,8 +106,8 @@ reb_apply_little_policy()
 	REB_LITTLE_POLICY=/sys/devices/system/cpu/cpufreq/policy0
 	[ -d "$REB_LITTLE_POLICY" ] || return 0
 	reb_write "$REB_LITTLE_POLICY/scaling_governor" schedutil
-	reb_write "$REB_LITTLE_POLICY/scaling_min_freq" 672000
-	reb_write "$REB_LITTLE_POLICY/schedutil/up_rate_limit_us" 0
+	reb_write "$REB_LITTLE_POLICY/scaling_min_freq" 300000
+	reb_write "$REB_LITTLE_POLICY/schedutil/up_rate_limit_us" 1000
 	reb_write "$REB_LITTLE_POLICY/schedutil/down_rate_limit_us" 10000
 	reb_write "$REB_LITTLE_POLICY/schedutil/hispeed_load" 75
 	reb_write "$REB_LITTLE_POLICY/schedutil/hispeed_freq" 1708800
