@@ -329,8 +329,7 @@ static ssize_t brightness_clone_store(struct device *dev,
 {
 	int rc;
 	struct backlight_device *bd = to_backlight_device(dev);
-	unsigned long brightness;
-	char *envp[2];
+	unsigned long brightness, hw_brightness, mult, limit;
 
 	rc = kstrtoul(buf, 0, &brightness);
 	if (rc)
@@ -338,9 +337,25 @@ static ssize_t brightness_clone_store(struct device *dev,
 
 	bd->props.brightness_clone = brightness;
 
-	envp[0] = "SOURCE=sysfs";
-	envp[1] = NULL;
-	kobject_uevent_env(&bd->dev.kobj, KOBJ_CHANGE, envp);
+	limit = bd->props.max_brightness ? bd->props.max_brightness : 2047;
+	mult = (limit >= 4090) ? 4 : 2;
+
+	if (brightness == 0) {
+		hw_brightness = 0;
+	} else {
+		hw_brightness = brightness * mult;
+		if (hw_brightness > limit)
+			hw_brightness = limit;
+		if (hw_brightness < 5)
+			hw_brightness = 5;
+	}
+
+	bd->usr_brightness_req = hw_brightness;
+	if (bd->thermal_brightness_limit &&
+	    hw_brightness > bd->thermal_brightness_limit)
+		hw_brightness = bd->thermal_brightness_limit;
+
+	backlight_device_set_brightness(bd, hw_brightness);
 	sysfs_notify(&bd->dev.kobj, NULL, "brightness_clone");
 
 	return count;
