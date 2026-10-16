@@ -124,9 +124,9 @@ jobs:
         run: |
           set -euo pipefail
           package=$(find "$OUT_DIR/packages" -maxdepth 1 -type f \
-            -name 'bk-Kernel_nabu-A17-Hyper-Panz-*.zip' -print -quit)
+            -name 'bk-Kernel_nabu-*.zip' -print -quit)
           module=$(find "$OUT_DIR/packages" -maxdepth 1 -type f \
-            -name 'bkk-control-*.zip' -print -quit)
+            -name '*control-*.zip' -print -quit)
           test -n "$package"
           test -n "$module"
           test -f "$package.sha256"
@@ -155,7 +155,7 @@ jobs:
       - name: 上传内核产物
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: bk-Kernel_nabu-A17-Hyper-Panz
+          name: bk-Kernel_nabu-A17-Hyper-yawaa
           path: |
             ${{ steps.package.outputs.package }}
             ${{ steps.package.outputs.checksum }}
