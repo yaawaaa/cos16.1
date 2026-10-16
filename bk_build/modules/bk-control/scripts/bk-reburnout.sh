@@ -1013,7 +1013,7 @@ reb_log "started"
 
 while :; do
 	sleep "$REB_INTERVAL"
-	reb_apply_base
+	# reb_apply_base
 	REB_SCREEN_ACTIVE=0
 	if reb_screen_on; then
 		REB_SCREEN_ACTIVE=1
@@ -1086,6 +1086,7 @@ while :; do
 		REB_HIGH_COUNT=0
 		REB_LOW_COUNT=0
 		reb_write_status inactive
+		sleep 30
 		continue
 	fi
 
