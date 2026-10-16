@@ -243,7 +243,7 @@ grep -Eq '(^|[[:space:]])pid[[:space:]]*;' \
   echo "BTF task_struct::pid is missing" >&2; exit 1;
 }
 kernel_release=$(make_kernel -s kernelrelease)
-[ "$kernel_release" = "4.14.336_bk-Kernel_17.0-Panz" ] || {
+[ "$kernel_release" = "4.14.336_bk-Kernel_17.0-yawaa" ] || {
   echo "unexpected kernel release: $kernel_release" >&2; exit 1;
 }
 
