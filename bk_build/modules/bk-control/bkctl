@@ -35,10 +35,10 @@ config_init()
 	{
 		echo 'audio_boost=1'
 		echo 'protected_writeback=1'
-		echo 'widget_boost=1'
-		echo 'touch_firmware=modern'
-		echo 'swappiness=180'
-		echo 'mode=auto'
+		echo 'widget_boost=0'
+		echo 'touch_firmware=miui125'
+		echo 'swappiness=160'
+		echo 'mode=off'
 	} > "$CONFIG_TMP" || return 1
 	mv -f "$CONFIG_TMP" "$CONFIG"
 }
