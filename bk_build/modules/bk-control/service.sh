@@ -61,3 +61,11 @@ printf '%s\n' "$!" > "$BK_KEYBOARD_PID_FILE"
 	done
 ) &
 "$MODDIR/scripts/bk-reburnout.sh"
+# Terminate runaway Xiaomi touch telemetry service
+(
+    while [ "$(getprop sys.boot_completed)" != "1" ]; do
+        sleep 2
+    done
+    stop toucheventcheck
+    pkill -9 toucheventcheck
+) &
