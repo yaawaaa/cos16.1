@@ -964,7 +964,7 @@ REB_TOUCH_HIGH_COUNT=0
 trap 'reb_cleanup' EXIT HUP INT TERM
 
 case "$(uname -r)" in
-	4.14.336_bk-Kernel_17.0-Panz) ;;
+	4.14.336_bk-Kernel_17.0-yawaa) ;;
 	*) reb_log "ignored on incompatible kernel $(uname -r)"; exit 0 ;;
 esac
 
