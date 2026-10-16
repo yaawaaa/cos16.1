@@ -31,7 +31,10 @@ write_node()
 config_init()
 {
 	mkdir -p "$STATE_DIR" || return 1
-	[ -f "$CONFIG" ] && return 0
+	if [ -f "$CONFIG" ]; then
+		sed -i 's/^touch_firmware=modern$/touch_firmware=miui125/' "$CONFIG" 2>/dev/null || true
+		return 0
+	fi
 	{
 		echo 'audio_boost=1'
 		echo 'protected_writeback=1'
@@ -342,7 +345,7 @@ open_log()
 	[ -f "$EXPORT_DIR/$1" ] || return 1
 	am start --user 0 -n "$EXPORT_PACKAGE/.ExportActivity" \
 		-f 0x10000000 --es name "$1" >/dev/null 2>&1 || return 1
-	echo '请选择日志保存位置'
+	echo 'Please select a location to save the log'
 }
 
 theme_seed()
