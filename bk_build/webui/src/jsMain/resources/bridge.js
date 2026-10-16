@@ -33,7 +33,7 @@
       if (separator > 0) values[line.slice(0, separator)] = line.slice(separator + 1);
     });
     if (!values.name || !values.path) {
-      return { errno: 5, stdout: "", stderr: "日志导出信息无效" };
+      return { errno: 5, stdout: "", stderr: "Invalid log export info" };
     }
 
     const opened = await global.bkExec(
