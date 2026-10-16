@@ -98,11 +98,11 @@ private external fun bkReducedMotion(): Boolean
 private external fun bkThemeSeed(): Int
 
 private data class ControlState(
-    val systemVersion: String = "读取中",
-    val androidVersion: String = "读取中",
-    val kernel: String = "读取中",
+    val systemVersion: String = "Loading...",
+    val androidVersion: String = "Loading...",
+    val kernel: String = "Loading...",
     val mode: String = "auto",
-    val runtimeMode: String = "读取中",
+    val runtimeMode: String = "Loading...",
     val keyboardEnabled: Boolean = false,
     val audioBoost: Boolean = true,
     val protectedWriteback: Boolean = true,
@@ -130,9 +130,9 @@ private fun parseState(text: String): ControlState {
         }
         .toMap()
     return ControlState(
-        systemVersion = values["system_version"] ?: "未知",
-        androidVersion = values["android_version"] ?: "未知",
-        kernel = values["kernel"] ?: "未知",
+        systemVersion = values["system_version"] ?: "Unknown",
+        androidVersion = values["android_version"] ?: "Unknown",
+        kernel = values["kernel"] ?: "Unknown",
         mode = values["mode"] ?: "auto",
         runtimeMode = values["runtime_mode"] ?: "unknown",
         keyboardEnabled = values["keyboard_enabled"] == "1",
@@ -145,12 +145,12 @@ private fun parseState(text: String): ControlState {
 }
 
 private fun runtimeLabel(mode: String): String = when (mode) {
-    "active" -> "高性能运行中"
-    "warming" -> "等待负载"
-    "cooling" -> "温控冷却"
-    "disabled" -> "策略已停用"
-    "inactive" -> "均衡运行中"
-    else -> "状态读取中"
+    "active" -> "Performance Mode Active"
+    "warming" -> "Awaiting Load"
+    "cooling" -> "Thermal Cooling"
+    "disabled" -> "Policy Disabled"
+    "inactive" -> "Balanced Running"
+    else -> "Reading Status..."
 }
 
 private fun parseThemeSeed(text: String): Color? {
@@ -220,7 +220,7 @@ private fun FontBootstrap() {
 @Composable
 private fun ControlScreen() {
     var state by remember { mutableStateOf(ControlState()) }
-    var message by remember { mutableStateOf("正在读取内核状态") }
+    var message by remember { mutableStateOf("Reading kernel status...") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -237,12 +237,12 @@ private fun ControlScreen() {
                 .onSuccess {
                     if (it.errno == 0) {
                         state = parseState(it.stdout)
-                        message = "配置已同步"
+                        message = "Configuration synced"
                     } else {
-                        message = it.stderr.ifBlank { "读取失败：${it.errno}" }
+                        message = it.stderr.ifBlank { "Read failed: ${it.errno}" }
                     }
                 }
-                .onFailure { message = it.message ?: "KernelSU 接口不可用" }
+                .onFailure { message = it.message ?: "KernelSU interface unavailable" }
             busy = false
         }
     }
@@ -252,9 +252,9 @@ private fun ControlScreen() {
             busy = true
             runCatching { runBkctl("set $key $value") }
                 .onSuccess {
-                    message = if (it.errno == 0) "设置已应用" else it.stderr.ifBlank { "设置失败：${it.errno}" }
+                    message = if (it.errno == 0) "Settings applied" else it.stderr.ifBlank { "Failed to apply: ${it.errno}" }
                 }
-                .onFailure { message = it.message ?: "设置失败" }
+                .onFailure { message = it.message ?: "Failed to apply settings" }
             val current = runCatching { runBkctl("get-all") }.getOrNull()
             if (current?.errno == 0) state = parseState(current.stdout)
             busy = false
@@ -262,10 +262,10 @@ private fun ControlScreen() {
     }
 
     fun saveLogs() {
-        bkToast("正在导出日志...")
+        bkToast("Exporting logs...")
         scope.launch {
             busy = true
-            message = "正在整理日志"
+            message = "Preparing logs..."
             runCatching {
                 val raw = bkExportLog("$BKCTL collect-log").await()
                 ExecResult(
@@ -276,10 +276,10 @@ private fun ControlScreen() {
             }.onSuccess {
                 message = when (it.errno) {
                     0 -> it.stdout.trim()
-                    130 -> "已取消日志导出"
-                    else -> it.stderr.ifBlank { "日志保存失败：${it.errno}" }
+                    130 -> "Log export cancelled"
+                    else -> it.stderr.ifBlank { "Failed to save logs: ${it.errno}" }
                 }
-            }.onFailure { message = it.message ?: "日志保存失败" }
+            }.onFailure { message = it.message ?: "Failed to save logs" }
             busy = false
         }
     }
@@ -403,8 +403,8 @@ private data class NavigationDestination(
 
 private val navigationDestinations by lazy {
     listOf(
-        NavigationDestination("主页", HomeIcon),
-        NavigationDestination("策略", PolicyIcon),
+        NavigationDestination("Home", HomeIcon),
+        NavigationDestination("Policy", PolicyIcon),
     )
 }
 
@@ -430,8 +430,8 @@ private fun ControlNavigationRail(mainState: MainPagerState) {
     NavigationRail(
         state = rememberNavigationRailState(),
         color = MiuixTheme.colorScheme.surface,
-        expandContentDescription = "展开导航",
-        collapseContentDescription = "收起导航",
+        expandContentDescription = "Expand Navigation",
+        collapseContentDescription = "Collapse Navigation",
     ) {
         navigationDestinations.forEachIndexed { index, destination ->
             NavigationRailItem(
@@ -497,7 +497,7 @@ private fun StatusCard(
     busy: Boolean,
     onRefresh: () -> Unit,
 ) {
-    val running = state.kernel != "读取中" && state.kernel != "未知" && state.runtimeMode != "unknown"
+    val running = state.kernel != "Loading..." && state.kernel != "Unknown" && state.runtimeMode != "unknown"
     Card(
         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
         colors = CardDefaults.defaultColors(
@@ -523,7 +523,7 @@ private fun StatusCard(
             }
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                 Text(
-                    text = if (running) "内核运行中" else "内核状态异常",
+                    text = if (running) "Kernel Active" else "Kernel Status Error",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -548,11 +548,11 @@ private fun StatusCard(
 private fun InfoCard(state: ControlState) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            InfoText("系统版本", state.systemVersion)
-            InfoText("Android 版本", state.androidVersion)
-            InfoText("内核版本", state.kernel)
-            InfoText("运行状态", runtimeLabel(state.runtimeMode))
-            InfoText("ZRAM swappiness", state.swappiness, bottomPadding = 0.dp)
+            InfoText("System Version", state.systemVersion)
+            InfoText("Android Version", state.androidVersion)
+            InfoText("Kernel Version", state.kernel)
+            InfoText("Runtime Status", runtimeLabel(state.runtimeMode))
+            InfoText("ZRAM Swappiness", state.swappiness, bottomPadding = 0.dp)
         }
     }
 }
@@ -584,16 +584,16 @@ private fun PolicyPager(
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val modeValues = listOf("auto", "force", "disabled")
-    val modeLabels = listOf("自动", "强制", "停用")
+    val modeLabels = listOf("Auto", "Force", "Disabled")
     val swappinessValues = listOf("160", "180")
-    val swappinessLabels = listOf("均衡 160", "积极 180")
+    val swappinessLabels = listOf("Balanced (160)", "Aggressive (180)")
     val firmwareValues = listOf("modern", "miui125")
-    val firmwareLabels = listOf("新版", "MIUI 12.5")
+    val firmwareLabels = listOf("Modern", "MIUI 12.5")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = "bk-kernel运行策略",
+                title = "bk-kernel Runtime Policy",
                 scrollBehavior = scrollBehavior,
                 actions = { LogAction(enabled = !busy, onClick = onSaveLogs) },
             )
@@ -614,23 +614,23 @@ private fun PolicyPager(
             item {
                 Card(Modifier.fillMaxWidth()) {
                     OverlayDropdownPreference(
-                        title = "运行模式",
-                        summary = "按负载和温度切换性能策略",
+                        title = "Performance Mode",
+                        summary = "Switch profile based on load and temperature",
                         items = modeLabels,
                         selectedIndex = modeValues.indexOf(state.mode).coerceAtLeast(0),
                         enabled = !busy,
                         onSelectedIndexChange = { onSetValue("mode", modeValues[it]) },
                     )
                     SwitchPreference(
-                        title = "小组件场景提升",
-                        summary = "桌面高负载时提升渲染线程",
+                        title = "Widget Boost",
+                        summary = "Boost launcher render threads under heavy load",
                         checked = state.widgetBoost,
                         enabled = !busy,
                         onCheckedChange = { onSetValue("widget_boost", if (it) "1" else "0") },
                     )
                     SwitchPreference(
-                        title = "音频低延迟",
-                        summary = "优先调度音频线程",
+                        title = "Audio Low Latency",
+                        summary = "Prioritize audio server scheduling",
                         checked = state.audioBoost,
                         enabled = !busy,
                         onCheckedChange = { onSetValue("audio_boost", if (it) "1" else "0") },
@@ -640,15 +640,15 @@ private fun PolicyPager(
             item {
                 Card(Modifier.fillMaxWidth()) {
                     SwitchPreference(
-                        title = "受保护 ZRAM 回写",
-                        summary = "仅在熄屏、低内存和低负载时回写",
+                        title = "Protected ZRAM Writeback",
+                        summary = "Write back idle pages only when screen is off, RAM is low, and load is quiet",
                         checked = state.protectedWriteback,
                         enabled = !busy,
                         onCheckedChange = { onSetValue("protected_writeback", if (it) "1" else "0") },
                     )
                     OverlayDropdownPreference(
-                        title = "ZRAM swappiness",
-                        summary = "控制匿名页换出倾向",
+                        title = "ZRAM Swappiness",
+                        summary = "Control anonymous memory swap aggressiveness",
                         items = swappinessLabels,
                         selectedIndex = swappinessValues.indexOf(state.swappiness).coerceAtLeast(0),
                         enabled = !busy,
@@ -659,8 +659,8 @@ private fun PolicyPager(
             item {
                 Card(Modifier.fillMaxWidth()) {
                     OverlayDropdownPreference(
-                        title = "触控固件",
-                        summary = "熄屏再亮屏后切换",
+                        title = "Touch Firmware",
+                        summary = "Switches after cycling screen off and on",
                         items = firmwareLabels,
                         selectedIndex = firmwareValues.indexOf(state.touchFirmware).coerceAtLeast(0),
                         enabled = !busy,
@@ -671,8 +671,8 @@ private fun PolicyPager(
             item {
                 Card(Modifier.fillMaxWidth()) {
                     SwitchPreference(
-                        title = "磁吸键盘接口",
-                        summary = "控制键盘供电和热插拔检测",
+                        title = "Pogo Pin Keyboard",
+                        summary = "Control keyboard power delivery and hotplug detection",
                         checked = state.keyboardEnabled,
                         enabled = !busy,
                         onCheckedChange = { onSetValue("keyboard_enabled", if (it) "1" else "0") },
@@ -697,8 +697,8 @@ private fun LogAction(enabled: Boolean, onClick: () -> Unit) {
     val entry = DropdownEntry(
         items = listOf(
             DropdownItem(
-                text = "保存完整日志",
-                summary = "运行日志与内核日志",
+                text = "Save Full Logs",
+                summary = "Runtime logs and kernel dmesg",
                 onClick = onClick,
             ),
         ),
@@ -706,7 +706,7 @@ private fun LogAction(enabled: Boolean, onClick: () -> Unit) {
     OverlayIconDropdownMenu(entry = entry, enabled = enabled) {
         Image(
             painter = painterResource(Res.drawable.save_log),
-            contentDescription = "日志",
+            contentDescription = "Logs",
             modifier = Modifier.size(24.dp),
             colorFilter = ColorFilter.tint(
                 if (enabled) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.disabledOnSurface,
