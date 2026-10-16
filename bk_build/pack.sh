@@ -2,7 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-OUT_DIR=${OUT_DIR:-/home/rinnrei/Project/uwuAP-temp/out/nabu-4.14.336-Pan}
+OUT_DIR=${OUT_DIR:-/home/rinnrei/Project/uwuAP-temp/out/nabu-4.14.336-yawaa}
 ARTIFACTS=${ARTIFACTS:-$OUT_DIR/artifacts}
 PACKAGE_ROOT=${PACKAGE_ROOT:-$OUT_DIR/packages}
 TEMPLATE=$SCRIPT_DIR/anykernel.sh
