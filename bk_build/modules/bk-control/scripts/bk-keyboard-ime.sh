@@ -8,7 +8,6 @@ STATE_DIR=/data/adb/bk-kernel
 PID_FILE=$STATE_DIR/bk-keyboard-ime.pid
 LOG_FILE=$STATE_DIR/bk-keyboard-ime.log
 NODE=/sys/devices/platform/soc/soc:xiaomi_keyboard/xiaomi_keyboard_connected
-GPIO_DEBUG=/sys/kernel/debug/gpio
 
 ime_log()
 {
@@ -63,10 +62,7 @@ while :; do
 		1*) BK_CUR=1 ;;
 		*) BK_CUR=0 ;;
 	esac
-	BK_GPIO=$(grep -m 1 ' gpio41 ' "$GPIO_DEBUG" 2>/dev/null) || BK_GPIO=
-	case "$BK_GPIO" in
-		*" in  0 "*) BK_CUR=0 ;;
-	esac
+
 	if [ "$BK_CUR" != "$BK_LAST" ]; then
 		if apply_state "$BK_CUR"; then
 			BK_LAST=$BK_CUR
