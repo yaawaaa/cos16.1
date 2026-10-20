@@ -1848,15 +1848,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* WITH THIS: */
-if (ts->pen_support && !(ts->pen_is_charge)) {
-	if (point_data[66] == 0x01 || point_data[66] == 0xF0)
-		pen_last_seen = jiffies;
-
-	if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(150)))
-		pen_suppress_palm = true;
-}
-
 /* Palm hold window: hold palm suppression for 350ms between strokes */
 	if (ts->pen_support && !(ts->pen_is_charge)) {
 		if (point_data[66] == 0x01 || point_data[66] == 0xF0)
