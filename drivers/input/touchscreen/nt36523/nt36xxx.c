@@ -1848,16 +1848,34 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: active whenever pen beacon is detected */
+/* 1. Proximity & hover palm window: hold for 1000ms across drawing pauses */
 	if (ts->pen_support && !(ts->pen_is_charge)) {
 		if (point_data[66] != 0xFF)
 			pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(400)))
+		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(1000)))
 			pen_suppress_palm = true;
 	}
 
-	if (!pen_suppress_palm) {
+	if (pen_suppress_palm) {
+		/* One-shot release: lift any palm touch that landed before the pen arrived */
+		if (fingers_currently_down) {
+#if MT_PROTOCOL_B
+			for (i = 0; i < ts->max_touch_num; i++) {
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			}
+			input_report_key(ts->input_dev, BTN_TOUCH, 0);
+#else
+			input_report_key(ts->input_dev, BTN_TOUCH, 0);
+			input_mt_sync(ts->input_dev);
+#endif
+			input_sync(ts->input_dev);
+			fingers_currently_down = false;
+		}
+	} else {
 		/* Normal finger touch processing */
 		finger_cnt = 0;
 
@@ -1930,6 +1948,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		}
 #endif
 		input_sync(ts->input_dev);
+		fingers_currently_down = (finger_cnt > 0);
 	}
 
 			if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
