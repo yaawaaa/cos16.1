@@ -1932,7 +1932,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		input_sync(ts->input_dev);
 	}
 
-			if (((point_data[position] & 0x07) == 0x01) || ((point_data[position] & 0x07) == 0x02)) {
+			if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
 #if CHECK_PEN_DATA_CHECKSUM
 		if (nvt_ts_pen_data_checksum(&point_data[66], PEN_DATA_LEN)) {
 			// pen data packet checksum not match, skip it
