@@ -1767,9 +1767,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	static bool pen_is_down = false;
 	static bool pen_in_range = false;
 	static bool fingers_currently_down = false;
-	static uint32_t last_pen_x = 0, last_pen_y = 0;
-	static bool have_last_pen_xy = false;
-	static int pen_jump_rejects = 0;
 	bool pen_suppress_palm = false;
 
 	static struct task_struct *touch_task = NULL;
@@ -1851,18 +1848,18 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* WITH THIS: */
-	if (ts->pen_support && !(ts->pen_is_charge)) {
+/* 150ms palm hold window: suppresses fingers while stylus is in proximity or lifting between strokes */
+	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
 		if (point_data[66] != 0xFF)
 			pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(800)))
+		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(150)))
 			pen_suppress_palm = true;
 	}
 
 	if (pen_suppress_palm) {
-		/* One-shot release: if a palm contact landed before the pen, lift it cleanly once */
 		if (fingers_currently_down) {
+			/* Palm rejection: cancel and suppress all finger touch slots once */
 #if MT_PROTOCOL_B
 			for (i = 0; i < ts->max_touch_num; i++) {
 				input_mt_slot(ts->input_dev, i);
@@ -1892,19 +1889,15 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #if NVT_TOUCH_ESD_PROTECT
 				irq_timer = jiffies;
 #endif
+				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
+				input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t)(point_data[position + 3] & 0x0F);
+				if ((input_x < 0) || (input_y < 0))
+					continue;
+				if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
+					continue;
 				input_w = (uint32_t)(point_data[position + 4]);
 				if (input_w == 0)
 					input_w = 1;
-
-				/* Lower hardware palm filter threshold: hand edges often register ~18-24 */
-				if (input_w > 20)
-					continue;
-
-				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
-				input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t)(point_data[position + 3] & 0x0F);
-				if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
-					continue;
-
 				if (i < 2) {
 					input_p = (uint32_t)(point_data[position + 5]) + (uint32_t)(point_data[i + 63] << 8);
 					if (input_p > TOUCH_FORCE_NUM)
@@ -1923,10 +1916,12 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
 				input_report_key(ts->input_dev, BTN_TOUCH, 1);
 #endif
+
 				input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
 				input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
 				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);
 				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
+
 #if !MT_PROTOCOL_B
 				input_mt_sync(ts->input_dev);
 #endif
@@ -1950,11 +1945,26 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_mt_sync(ts->input_dev);
 		}
 #endif
+
+#if TOUCH_KEY_NUM > 0
+		if (point_data[61] == 0xF8) {
+#if NVT_TOUCH_ESD_PROTECT
+			irq_timer = jiffies;
+#endif
+			for (i = 0; i < ts->max_button_num; i++) {
+				input_report_key(ts->input_dev, touch_key_array[i], ((point_data[62] >> i) & 0x01));
+			}
+		} else {
+			for (i = 0; i < ts->max_button_num; i++) {
+				input_report_key(ts->input_dev, touch_key_array[i], 0);
+			}
+		}
+#endif
 		input_sync(ts->input_dev);
 		fingers_currently_down = (finger_cnt > 0);
 	}
 
-			if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
+	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
 #if CHECK_PEN_DATA_CHECKSUM
 		if (nvt_ts_pen_data_checksum(&point_data[66], PEN_DATA_LEN)) {
 			// pen data packet checksum not match, skip it
@@ -1963,57 +1973,16 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif // #if CHECK_PEN_DATA_CHECKSUM
 
 // parse and handle pen report
-	pen_format_id = point_data[66];
-	if (pen_format_id == 0x01) {
+		pen_format_id = point_data[66];
+		if (pen_format_id == 0x01) {
 #if NVT_TOUCH_ESD_PROTECT
-		irq_timer = jiffies;
+			irq_timer = jiffies;
 #endif
-		pen_last_seen = jiffies;
-		pen_missing_debounce = 0;
+			pen_last_seen = jiffies;
+			pen_missing_debounce = 0;
 
-		pen_x = (uint32_t)(point_data[67] << 8) + (uint32_t)(point_data[68]);
-		pen_y = (uint32_t)(point_data[69] << 8) + (uint32_t)(point_data[70]);
-		/* Pen palm-jump filter: discard ghost coordinates jumping to the resting hand */
-            {
-                static uint32_t last_good_pen_x = 0;
-                static uint32_t last_good_pen_y = 0;
-                static bool pen_was_down = false;
-                static int jump_count = 0;
-                uint32_t current_p = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
-
-                if (current_p > 0) {
-                    if (pen_was_down) {
-                        int32_t dx = (int32_t)pen_x - (int32_t)last_good_pen_x;
-                        int32_t dy = (int32_t)pen_y - (int32_t)last_good_pen_y;
-                        if (dx < 0) dx = -dx;
-                        if (dy < 0) dy = -dy;
-
-                        /* If coordinate jumps > 1200 units in 4ms, clamp it to the active stroke */
-                        if (dx > 350 || dy > 350) {
-                            if (++jump_count < 8) {
-                                pen_x = last_good_pen_x;
-                                pen_y = last_good_pen_y;
-                            } else {
-                                last_good_pen_x = pen_x;
-                                last_good_pen_y = pen_y;
-                                jump_count = 0;
-                            }
-                        } else {
-                            last_good_pen_x = pen_x;
-                            last_good_pen_y = pen_y;
-                            jump_count = 0;
-                        }
-                    } else {
-                        last_good_pen_x = pen_x;
-                        last_good_pen_y = pen_y;
-                        pen_was_down = true;
-                        jump_count = 0;
-                    }
-                } else {
-                    pen_was_down = false;
-                    jump_count = 0;
-                }
-            }
+			pen_x = (uint32_t)(point_data[67] << 8) + (uint32_t)(point_data[68]);
+			pen_y = (uint32_t)(point_data[69] << 8) + (uint32_t)(point_data[70]);
 			if (READ_ONCE(ts->fw_mode_applied) == NVT_TOUCH_FW_MIUI125 ||
 			    READ_ONCE(ts->fw_mode_requested) == NVT_TOUCH_FW_MIUI125) {
 				pen_x <<= 2;
@@ -2080,7 +2049,6 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				if (pen_missing_debounce >= 10) {
 					release_pen_event();
 					pen_in_range = false;
-					have_last_pen_xy = false;
 					pen_is_down = false;
 					pen_missing_debounce = 0;
 					pen_tip_debounce = 0;
