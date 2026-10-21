@@ -1848,12 +1848,12 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: hold for 1000ms across drawing pauses */
+/* 1. Proximity & hover palm window: hold for 3000ms across normal writing pauses */
 	if (ts->pen_support && !(ts->pen_is_charge)) {
 		if (point_data[66] != 0xFF)
 			pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(1000)))
+		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(3000)))
 			pen_suppress_palm = true;
 	}
 
@@ -1893,8 +1893,8 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				if (input_w == 0)
 					input_w = 1;
 
-				/* Hardware palm filter: ignore contacts with palm-sized area */
-				if (input_w > 28)
+				/* Hardware palm filter: your palm registered as area 14; clamp at 10 */
+				if (ts->pen_input_dev_enable && input_w > 10)
 					continue;
 
 				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
@@ -1976,34 +1976,36 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				pen_y <<= 2;
 			}
 			pen_pressure = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
-			/* Clamp 240Hz crosstalk coordinate jumps to palm */
+			/* Crosstalk filter: locks coordinates to stylus and rejects palm spikes */
 			{
 				static uint32_t last_valid_x = 0;
 				static uint32_t last_valid_y = 0;
-				static bool stroke_in_progress = false;
+				static int spike_count = 0;
 
-				if (pen_pressure > 0) {
-					if (stroke_in_progress) {
-						int32_t dx = (int32_t)pen_x - (int32_t)last_valid_x;
-						int32_t dy = (int32_t)pen_y - (int32_t)last_valid_y;
-						if (dx < 0) dx = -dx;
-						if (dy < 0) dy = -dy;
+				if (last_valid_x == 0 && last_valid_y == 0) {
+					last_valid_x = pen_x;
+					last_valid_y = pen_y;
+				} else {
+					int32_t dx = (int32_t)pen_x - (int32_t)last_valid_x;
+					int32_t dy = (int32_t)pen_y - (int32_t)last_valid_y;
+					if (dx < 0) dx = -dx;
+					if (dy < 0) dy = -dy;
 
-						/* Jumps > 1200 in shifted coordinates are crosstalk spikes */
-						if (dx > 1200 || dy > 1200) {
+					/* Jumps > 1200 units in 4ms while down are crosstalk spikes to palm */
+					if ((dx > 1200 || dy > 1200) && pen_pressure > 0) {
+						if (++spike_count < 6) {
 							pen_x = last_valid_x;
 							pen_y = last_valid_y;
 						} else {
 							last_valid_x = pen_x;
 							last_valid_y = pen_y;
+							spike_count = 0;
 						}
 					} else {
 						last_valid_x = pen_x;
 						last_valid_y = pen_y;
-						stroke_in_progress = true;
+						spike_count = 0;
 					}
-				} else {
-					stroke_in_progress = false;
 				}
 			}
 			pen_tilt_x = (int8_t)point_data[73];
