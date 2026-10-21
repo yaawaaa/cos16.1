@@ -1848,33 +1848,16 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* Palm hold window: hold palm suppression for 350ms between strokes */
+/* 1. Proximity & hover palm window: active whenever pen beacon is detected */
 	if (ts->pen_support && !(ts->pen_is_charge)) {
-		if (point_data[66] == 0x01 || point_data[66] == 0xF0)
+		if (point_data[66] != 0xFF)
 			pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(350)))
+		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(400)))
 			pen_suppress_palm = true;
 	}
 
-	if (pen_suppress_palm) {
-		if (fingers_currently_down) {
-#if MT_PROTOCOL_B
-			for (i = 0; i < ts->max_touch_num; i++) {
-				input_mt_slot(ts->input_dev, i);
-				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
-			}
-			input_report_key(ts->input_dev, BTN_TOUCH, 0);
-#else
-			input_report_key(ts->input_dev, BTN_TOUCH, 0);
-			input_mt_sync(ts->input_dev);
-#endif
-			input_sync(ts->input_dev);
-			fingers_currently_down = false;
-		}
-	} else {
+	if (!pen_suppress_palm) {
 		/* Normal finger touch processing */
 		finger_cnt = 0;
 
@@ -1883,6 +1866,71 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			input_id = (uint8_t)(point_data[position + 0] >> 3);
 			if ((input_id == 0) || (input_id > ts->max_touch_num))
 				continue;
+
+			if (((point_data[position] & 0x07) == 0x01) || ((point_data[position] & 0x07) == 0x02)) {
+#if NVT_TOUCH_ESD_PROTECT
+				irq_timer = jiffies;
+#endif
+				input_w = (uint32_t)(point_data[position + 4]);
+				if (input_w == 0)
+					input_w = 1;
+
+				/* Hardware palm filter: ignore contacts with palm-sized area */
+				if (input_w > 28)
+					continue;
+
+				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
+				input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t)(point_data[position + 3] & 0x0F);
+				if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
+					continue;
+
+				if (i < 2) {
+					input_p = (uint32_t)(point_data[position + 5]) + (uint32_t)(point_data[i + 63] << 8);
+					if (input_p > TOUCH_FORCE_NUM)
+						input_p = TOUCH_FORCE_NUM;
+				} else {
+					input_p = (uint32_t)(point_data[position + 5]);
+				}
+				if (input_p == 0)
+					input_p = 1;
+
+#if MT_PROTOCOL_B
+				press_id[input_id - 1] = 1;
+				input_mt_slot(ts->input_dev, input_id - 1);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+#else
+				input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
+				input_report_key(ts->input_dev, BTN_TOUCH, 1);
+#endif
+				input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
+				input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
+#if !MT_PROTOCOL_B
+				input_mt_sync(ts->input_dev);
+#endif
+				finger_cnt++;
+			}
+		}
+
+#if MT_PROTOCOL_B
+		for (i = 0; i < ts->max_touch_num; i++) {
+			if (press_id[i] != 1) {
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			}
+		}
+		input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
+#else
+		if (finger_cnt == 0) {
+			input_report_key(ts->input_dev, BTN_TOUCH, 0);
+			input_mt_sync(ts->input_dev);
+		}
+#endif
+		input_sync(ts->input_dev);
+	}
 
 			if (((point_data[position] & 0x07) == 0x01) || ((point_data[position] & 0x07) == 0x02)) {
 #if NVT_TOUCH_ESD_PROTECT
