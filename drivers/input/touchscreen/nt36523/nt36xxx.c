@@ -1767,6 +1767,9 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	static bool pen_is_down = false;
 	static bool pen_in_range = false;
 	static bool fingers_currently_down = false;
+	static uint32_t last_pen_x = 0, last_pen_y = 0;
+	static bool have_last_pen_xy = false;
+	static int pen_jump_rejects = 0;
 	bool pen_suppress_palm = false;
 
 	static struct task_struct *touch_task = NULL;
@@ -1956,6 +1959,22 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				pen_x <<= 2;
 				pen_y <<= 2;
 			}
+
+			/* Reject ghost samples: a real pen cannot jump this far in one frame */
+			if (have_last_pen_xy) {
+				uint32_t dx = pen_x > last_pen_x ? pen_x - last_pen_x : last_pen_x - pen_x;
+				uint32_t dy = pen_y > last_pen_y ? pen_y - last_pen_y : last_pen_y - pen_y;
+
+				if ((dx > 1600 || dy > 1600) && pen_jump_rejects < 6) {
+					pen_jump_rejects++;
+					goto XFER_ERROR;
+				}
+			}
+			pen_jump_rejects = 0;
+			last_pen_x = pen_x;
+			last_pen_y = pen_y;
+			have_last_pen_xy = true;
+
 			pen_pressure = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
 			pen_tilt_x = (int8_t)point_data[73];
 			pen_tilt_y = (int8_t)point_data[74];
@@ -2017,6 +2036,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				if (pen_missing_debounce >= 10) {
 					release_pen_event();
 					pen_in_range = false;
+					have_last_pen_xy = false;
 					pen_is_down = false;
 					pen_missing_debounce = 0;
 					pen_tip_debounce = 0;
