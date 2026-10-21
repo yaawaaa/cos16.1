@@ -1851,12 +1851,12 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: active whenever pen beacon is detected */
+/* WITH THIS: */
 	if (ts->pen_support && !(ts->pen_is_charge)) {
 		if (point_data[66] != 0xFF)
 			pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(400)))
+		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(800)))
 			pen_suppress_palm = true;
 	}
 
@@ -1963,37 +1963,62 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif // #if CHECK_PEN_DATA_CHECKSUM
 
 // parse and handle pen report
-		pen_format_id = point_data[66];
-		if (pen_format_id == 0x01) {
+	pen_format_id = point_data[66];
+	if (pen_format_id == 0x01) {
 #if NVT_TOUCH_ESD_PROTECT
-			irq_timer = jiffies;
+		irq_timer = jiffies;
 #endif
-			pen_last_seen = jiffies;
-			pen_missing_debounce = 0;
+		pen_last_seen = jiffies;
+		pen_missing_debounce = 0;
 
-			pen_x = (uint32_t)(point_data[67] << 8) + (uint32_t)(point_data[68]);
-			pen_y = (uint32_t)(point_data[69] << 8) + (uint32_t)(point_data[70]);
+		pen_x = (uint32_t)(point_data[67] << 8) + (uint32_t)(point_data[68]);
+		pen_y = (uint32_t)(point_data[69] << 8) + (uint32_t)(point_data[70]);
+		/* Pen palm-jump filter: discard ghost coordinates jumping to the resting hand */
+            {
+                static uint32_t last_good_pen_x = 0;
+                static uint32_t last_good_pen_y = 0;
+                static bool pen_was_down = false;
+                static int jump_count = 0;
+                uint32_t current_p = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
+
+                if (current_p > 0) {
+                    if (pen_was_down) {
+                        int32_t dx = (int32_t)pen_x - (int32_t)last_good_pen_x;
+                        int32_t dy = (int32_t)pen_y - (int32_t)last_good_pen_y;
+                        if (dx < 0) dx = -dx;
+                        if (dy < 0) dy = -dy;
+
+                        /* If coordinate jumps > 1200 units in 4ms, clamp it to the active stroke */
+                        if (dx > 1200 || dy > 1200) {
+                            if (++jump_count < 8) {
+                                pen_x = last_good_pen_x;
+                                pen_y = last_good_pen_y;
+                            } else {
+                                last_good_pen_x = pen_x;
+                                last_good_pen_y = pen_y;
+                                jump_count = 0;
+                            }
+                        } else {
+                            last_good_pen_x = pen_x;
+                            last_good_pen_y = pen_y;
+                            jump_count = 0;
+                        }
+                    } else {
+                        last_good_pen_x = pen_x;
+                        last_good_pen_y = pen_y;
+                        pen_was_down = true;
+                        jump_count = 0;
+                    }
+                } else {
+                    pen_was_down = false;
+                    jump_count = 0;
+                }
+            }
 			if (READ_ONCE(ts->fw_mode_applied) == NVT_TOUCH_FW_MIUI125 ||
 			    READ_ONCE(ts->fw_mode_requested) == NVT_TOUCH_FW_MIUI125) {
 				pen_x <<= 2;
 				pen_y <<= 2;
 			}
-
-			/* Reject ghost samples: a real pen cannot jump this far in one frame */
-			if (have_last_pen_xy) {
-				uint32_t dx = pen_x > last_pen_x ? pen_x - last_pen_x : last_pen_x - pen_x;
-				uint32_t dy = pen_y > last_pen_y ? pen_y - last_pen_y : last_pen_y - pen_y;
-
-				if ((dx > 1600 || dy > 1600) && pen_jump_rejects < 6) {
-					pen_jump_rejects++;
-					goto XFER_ERROR;
-				}
-			}
-			pen_jump_rejects = 0;
-			last_pen_x = pen_x;
-			last_pen_y = pen_y;
-			have_last_pen_xy = true;
-
 			pen_pressure = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
 			pen_tilt_x = (int8_t)point_data[73];
 			pen_tilt_y = (int8_t)point_data[74];
