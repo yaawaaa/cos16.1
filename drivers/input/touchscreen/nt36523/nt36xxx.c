@@ -1976,6 +1976,36 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				pen_y <<= 2;
 			}
 			pen_pressure = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
+			/* Clamp 240Hz crosstalk coordinate jumps to palm */
+			{
+				static uint32_t last_valid_x = 0;
+				static uint32_t last_valid_y = 0;
+				static bool stroke_in_progress = false;
+
+				if (pen_pressure > 0) {
+					if (stroke_in_progress) {
+						int32_t dx = (int32_t)pen_x - (int32_t)last_valid_x;
+						int32_t dy = (int32_t)pen_y - (int32_t)last_valid_y;
+						if (dx < 0) dx = -dx;
+						if (dy < 0) dy = -dy;
+
+						/* Jumps > 1200 in shifted coordinates are crosstalk spikes */
+						if (dx > 1200 || dy > 1200) {
+							pen_x = last_valid_x;
+							pen_y = last_valid_y;
+						} else {
+							last_valid_x = pen_x;
+							last_valid_y = pen_y;
+						}
+					} else {
+						last_valid_x = pen_x;
+						last_valid_y = pen_y;
+						stroke_in_progress = true;
+					}
+				} else {
+					stroke_in_progress = false;
+				}
+			}
 			pen_tilt_x = (int8_t)point_data[73];
 			pen_tilt_y = (int8_t)point_data[74];
 			pen_distance = (uint32_t)(point_data[75] << 8) + (uint32_t)(point_data[76]);
@@ -2336,6 +2366,9 @@ static void update_touchfeature_value_work(struct work_struct *work) {
 		temp_get_value = xiaomi_touch_interfaces.touch_mode[mode_type[i]][GET_CUR_VALUE];
 		temp_set_value = xiaomi_touch_interfaces.touch_mode[mode_type[i]][SET_CUR_VALUE];
 		if (temp_get_value == temp_set_value)
+			continue;
+		/* Never allow game mode to kill 240Hz polling when pen is enabled */
+		if (touchfeature_addr[i] == 0x7A && ts->pen_input_dev_enable)
 			continue;
 		nvt_game_value[0] = touchfeature_addr[i];
 		nvt_game_value[1] = temp_set_value;
