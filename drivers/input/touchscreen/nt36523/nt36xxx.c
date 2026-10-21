@@ -1989,7 +1989,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
                         if (dy < 0) dy = -dy;
 
                         /* If coordinate jumps > 1200 units in 4ms, clamp it to the active stroke */
-                        if (dx > 1200 || dy > 1200) {
+                        if (dx > 350 || dy > 350) {
                             if (++jump_count < 8) {
                                 pen_x = last_good_pen_x;
                                 pen_y = last_good_pen_y;
