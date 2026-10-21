@@ -1860,7 +1860,25 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			pen_suppress_palm = true;
 	}
 
-	if (!pen_suppress_palm) {
+	if (pen_suppress_palm) {
+		/* One-shot release: if a palm contact landed before the pen, lift it cleanly once */
+		if (fingers_currently_down) {
+#if MT_PROTOCOL_B
+			for (i = 0; i < ts->max_touch_num; i++) {
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			}
+			input_report_key(ts->input_dev, BTN_TOUCH, 0);
+#else
+			input_report_key(ts->input_dev, BTN_TOUCH, 0);
+			input_mt_sync(ts->input_dev);
+#endif
+			input_sync(ts->input_dev);
+			fingers_currently_down = false;
+		}
+	} else {
 		/* Normal finger touch processing */
 		finger_cnt = 0;
 
@@ -1878,8 +1896,8 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 				if (input_w == 0)
 					input_w = 1;
 
-				/* Hardware palm filter: ignore contacts with palm-sized area */
-				if (input_w > 28)
+				/* Lower hardware palm filter threshold: hand edges often register ~18-24 */
+				if (input_w > 20)
 					continue;
 
 				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
@@ -1933,6 +1951,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		}
 #endif
 		input_sync(ts->input_dev);
+		fingers_currently_down = (finger_cnt > 0);
 	}
 
 			if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
