@@ -155,7 +155,7 @@ jobs:
       - name: 上传内核产物
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: bk-Kernel_nabu-A17-Hyper-yawaa
+          name: bk-Kernel_nabu-A17-Hyper-Panz
           path: |
             ${{ steps.package.outputs.package }}
             ${{ steps.package.outputs.checksum }}
