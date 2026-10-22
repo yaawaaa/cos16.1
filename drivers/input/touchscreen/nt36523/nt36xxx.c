@@ -1198,6 +1198,9 @@ static void release_pen_event(void) {
 		input_report_key(ts->pen_input_dev, BTN_STYLUS, 0);
 		input_report_key(ts->pen_input_dev, BTN_STYLUS2, 0);
 		input_sync(ts->pen_input_dev);
+		ts->pen_last_valid_x = 0;
+		ts->pen_last_valid_y = 0;
+		ts->pen_spike_count = 0;
 	}
 }
 
@@ -1761,13 +1764,12 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	uint32_t pen_btn1 = 0;
 	uint32_t pen_btn2 = 0;
 	uint32_t pen_battery = 0;
-	static unsigned long pen_last_seen = 0;
 	static int pen_tip_debounce = 0;
 	static int pen_missing_debounce = 0;
 	static bool pen_is_down = false;
 	static bool pen_in_range = false;
-	static bool fingers_currently_down = false;
 	bool pen_suppress_palm = false;
+	int32_t palm_cnt = 0;
 
 	static struct task_struct *touch_task = NULL;
 	struct sched_param par = { .sched_priority = MAX_RT_PRIO - 1 };
@@ -1848,110 +1850,143 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: hold for 3000ms across normal writing pauses */
-	if (ts->pen_support && !(ts->pen_is_charge)) {
+/* 1. Proximity & hover palm window: hold for 600ms across normal writing pauses */
+	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
 		if (point_data[66] != 0xFF)
-			pen_last_seen = jiffies;
+			ts->pen_last_seen = jiffies;
 
-		if (pen_last_seen && time_before(jiffies, pen_last_seen + msecs_to_jiffies(3000)))
+		if (ts->pen_last_seen && time_before(jiffies, ts->pen_last_seen + msecs_to_jiffies(600)))
 			pen_suppress_palm = true;
+	} else {
+		ts->pen_last_seen = 0;
 	}
 
-	if (pen_suppress_palm) {
-		/* One-shot release: lift any palm touch that landed before the pen arrived */
-		if (fingers_currently_down) {
-#if MT_PROTOCOL_B
-			for (i = 0; i < ts->max_touch_num; i++) {
-				input_mt_slot(ts->input_dev, i);
-				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
-			}
-			input_report_key(ts->input_dev, BTN_TOUCH, 0);
-#else
-			input_report_key(ts->input_dev, BTN_TOUCH, 0);
-			input_mt_sync(ts->input_dev);
+#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
+	if ((point_data[1] >> 3) == DATA_PROTOCOL)
+		nvt_check_palm(DATA_PROTOCOL, point_data);
 #endif
-			input_sync(ts->input_dev);
-			fingers_currently_down = false;
-		}
-	} else {
-		/* Normal finger touch processing */
-		finger_cnt = 0;
 
-		for (i = 0; i < ts->max_touch_num; i++) {
-			position = 1 + 6 * i;
-			input_id = (uint8_t)(point_data[position + 0] >> 3);
-			if ((input_id == 0) || (input_id > ts->max_touch_num))
-				continue;
-
-			if (((point_data[position] & 0x07) == 0x01) || ((point_data[position] & 0x07) == 0x02)) {
-#if NVT_TOUCH_ESD_PROTECT
-				irq_timer = jiffies;
-#endif
-				input_w = (uint32_t)(point_data[position + 4]);
-				if (input_w == 0)
-					input_w = 1;
-
-				/* Hardware palm filter: your palm registered as area 14; clamp at 10 */
-				if (ts->pen_input_dev_enable && input_w > 10)
-					continue;
-
-				input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
-				input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t)(point_data[position + 3] & 0x0F);
-				if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
-					continue;
-
-				if (i < 2) {
-					input_p = (uint32_t)(point_data[position + 5]) + (uint32_t)(point_data[i + 63] << 8);
-					if (input_p > TOUCH_FORCE_NUM)
-						input_p = TOUCH_FORCE_NUM;
-				} else {
-					input_p = (uint32_t)(point_data[position + 5]);
-				}
-				if (input_p == 0)
-					input_p = 1;
-
-#if MT_PROTOCOL_B
-				press_id[input_id - 1] = 1;
-				input_mt_slot(ts->input_dev, input_id - 1);
-				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
-#else
-				input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
-				input_report_key(ts->input_dev, BTN_TOUCH, 1);
-#endif
-				input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
-				input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
-				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);
-				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
-#if !MT_PROTOCOL_B
-				input_mt_sync(ts->input_dev);
-#endif
-				finger_cnt++;
-			}
-		}
-
+	/* If pen suppression is active and any fingers/palm were currently down,
+	 * cleanly release them immediately so they don't linger on screen.
+	 */
+	if (pen_suppress_palm && ts->fingers_currently_down) {
 #if MT_PROTOCOL_B
 		for (i = 0; i < ts->max_touch_num; i++) {
-			if (press_id[i] != 1) {
-				input_mt_slot(ts->input_dev, i);
-				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
-			}
+			input_mt_slot(ts->input_dev, i);
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
 		}
-		input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
+		input_report_key(ts->input_dev, BTN_TOUCH, 0);
 #else
-		if (finger_cnt == 0) {
-			input_report_key(ts->input_dev, BTN_TOUCH, 0);
-			input_mt_sync(ts->input_dev);
-		}
+		input_report_key(ts->input_dev, BTN_TOUCH, 0);
+		input_mt_sync(ts->input_dev);
 #endif
 		input_sync(ts->input_dev);
-		fingers_currently_down = (finger_cnt > 0);
+		ts->fingers_currently_down = false;
 	}
 
-			if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
+	/* Multi-touch finger and palm processing */
+	finger_cnt = 0;
+	palm_cnt = 0;
+
+	for (i = 0; i < ts->max_touch_num; i++) {
+		position = 1 + 6 * i;
+		input_id = (uint8_t)(point_data[position + 0] >> 3);
+		if ((input_id == 0) || (input_id > ts->max_touch_num))
+			continue;
+
+		if (((point_data[position] & 0x07) == 0x01) || ((point_data[position] & 0x07) == 0x02)) {
+#if NVT_TOUCH_ESD_PROTECT
+			irq_timer = jiffies;
+#endif
+			input_w = (uint32_t)(point_data[position + 4]);
+			if (input_w == 0)
+				input_w = 1;
+
+			/* If pen is hovering/writing, all touch contacts are from the resting hand */
+			if (pen_suppress_palm)
+				ts->palm_contacts_mask |= (1 << input_id);
+
+			/* Palm detection:
+			 * 1. Contact was flagged while pen was in range (persists until contact lifts)
+			 * 2. Or contact area is abnormally large (>= 22) typical of palm contact
+			 */
+			if ((ts->palm_contacts_mask & (1 << input_id)) || (input_w >= 22)) {
+				ts->palm_contacts_mask |= (1 << input_id);
+				palm_cnt++;
+#if MT_PROTOCOL_B
+				input_mt_slot(ts->input_dev, input_id - 1);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_PALM, true);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);
+#endif
+				continue;
+			}
+
+			input_x = (uint32_t)(point_data[position + 1] << 4) + (uint32_t)(point_data[position + 3] >> 4);
+			input_y = (uint32_t)(point_data[position + 2] << 4) + (uint32_t)(point_data[position + 3] & 0x0F);
+			if ((input_x > ts->abs_x_max) || (input_y > ts->abs_y_max))
+				continue;
+
+			if (i < 2) {
+				input_p = (uint32_t)(point_data[position + 5]) + (uint32_t)(point_data[i + 63] << 8);
+				if (input_p > TOUCH_FORCE_NUM)
+					input_p = TOUCH_FORCE_NUM;
+			} else {
+				input_p = (uint32_t)(point_data[position + 5]);
+			}
+			if (input_p == 0)
+				input_p = 1;
+
+#if MT_PROTOCOL_B
+			press_id[input_id - 1] = 1;
+			input_mt_slot(ts->input_dev, input_id - 1);
+			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
+#else
+			input_report_abs(ts->input_dev, ABS_MT_TRACKING_ID, input_id - 1);
+			input_report_key(ts->input_dev, BTN_TOUCH, 1);
+#endif
+			input_report_abs(ts->input_dev, ABS_MT_POSITION_X, input_x);
+			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, input_y);
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, input_w);
+			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, input_p);
+#if !MT_PROTOCOL_B
+			input_mt_sync(ts->input_dev);
+#endif
+			finger_cnt++;
+		} else {
+			/* Contact lifted: clear from palm mask */
+			ts->palm_contacts_mask &= ~(1 << input_id);
+		}
+	}
+
+#if MT_PROTOCOL_B
+	for (i = 0; i < ts->max_touch_num; i++) {
+		if (press_id[i] != 1) {
+			/* If not an active finger contact and not an active palm slot, release slot */
+			if (!(ts->palm_contacts_mask & (1 << (i + 1)))) {
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			}
+		}
+	}
+	input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
+#else
+	if (finger_cnt == 0) {
+		input_report_key(ts->input_dev, BTN_TOUCH, 0);
+		input_mt_sync(ts->input_dev);
+	}
+#endif
+	input_sync(ts->input_dev);
+	ts->fingers_currently_down = (finger_cnt > 0);
+
+#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
+	update_palm_sensor_value((palm_cnt > 0 || pen_suppress_palm) ? 1 : 0);
+#endif
+
+	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
 #if CHECK_PEN_DATA_CHECKSUM
 		if (nvt_ts_pen_data_checksum(&point_data[66], PEN_DATA_LEN)) {
 			// pen data packet checksum not match, skip it
@@ -1959,13 +1994,13 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		}
 #endif // #if CHECK_PEN_DATA_CHECKSUM
 
-// parse and handle pen report
+		// parse and handle pen report
 		pen_format_id = point_data[66];
 		if (pen_format_id == 0x01) {
 #if NVT_TOUCH_ESD_PROTECT
 			irq_timer = jiffies;
 #endif
-			pen_last_seen = jiffies;
+			ts->pen_last_seen = jiffies;
 			pen_missing_debounce = 0;
 
 			pen_x = (uint32_t)(point_data[67] << 8) + (uint32_t)(point_data[68]);
@@ -1978,33 +2013,33 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			pen_pressure = (uint32_t)(point_data[71] << 8) + (uint32_t)(point_data[72]);
 			/* Crosstalk filter: locks coordinates to stylus and rejects palm spikes */
 			{
-				static uint32_t last_valid_x = 0;
-				static uint32_t last_valid_y = 0;
-				static int spike_count = 0;
-
-				if (last_valid_x == 0 && last_valid_y == 0) {
-					last_valid_x = pen_x;
-					last_valid_y = pen_y;
+				if (pen_pressure == 0) {
+					ts->pen_last_valid_x = 0;
+					ts->pen_last_valid_y = 0;
+					ts->pen_spike_count = 0;
+				} else if (ts->pen_last_valid_x == 0 && ts->pen_last_valid_y == 0) {
+					ts->pen_last_valid_x = pen_x;
+					ts->pen_last_valid_y = pen_y;
 				} else {
-					int32_t dx = (int32_t)pen_x - (int32_t)last_valid_x;
-					int32_t dy = (int32_t)pen_y - (int32_t)last_valid_y;
+					int32_t dx = (int32_t)pen_x - (int32_t)ts->pen_last_valid_x;
+					int32_t dy = (int32_t)pen_y - (int32_t)ts->pen_last_valid_y;
 					if (dx < 0) dx = -dx;
 					if (dy < 0) dy = -dy;
 
 					/* Jumps > 1200 units in 4ms while down are crosstalk spikes to palm */
 					if ((dx > 1200 || dy > 1200) && pen_pressure > 0) {
-						if (++spike_count < 6) {
-							pen_x = last_valid_x;
-							pen_y = last_valid_y;
+						if (++ts->pen_spike_count < 6) {
+							pen_x = ts->pen_last_valid_x;
+							pen_y = ts->pen_last_valid_y;
 						} else {
-							last_valid_x = pen_x;
-							last_valid_y = pen_y;
-							spike_count = 0;
+							ts->pen_last_valid_x = pen_x;
+							ts->pen_last_valid_y = pen_y;
+							ts->pen_spike_count = 0;
 						}
 					} else {
-						last_valid_x = pen_x;
-						last_valid_y = pen_y;
-						spike_count = 0;
+						ts->pen_last_valid_x = pen_x;
+						ts->pen_last_valid_y = pen_y;
+						ts->pen_spike_count = 0;
 					}
 				}
 			}
@@ -2036,10 +2071,16 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 						input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
 						pen_is_down = false;
 						pen_tip_debounce = 0;
+						ts->pen_last_valid_x = 0;
+						ts->pen_last_valid_y = 0;
+						ts->pen_spike_count = 0;
 					}
 				} else {
 					input_report_key(ts->pen_input_dev, BTN_TOUCH, 0);
 					input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
+					ts->pen_last_valid_x = 0;
+					ts->pen_last_valid_y = 0;
+					ts->pen_spike_count = 0;
 				}
 			}
 
@@ -2062,6 +2103,9 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 					input_sync(ts->pen_input_dev);
 					pen_is_down = false;
 					pen_tip_debounce = 0;
+					ts->pen_last_valid_x = 0;
+					ts->pen_last_valid_y = 0;
+					ts->pen_spike_count = 0;
 				}
 
 				/* Debounce hover state (10 missed frames / ~40ms) before tool departure */
@@ -3093,7 +3137,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 					ts->abs_x_max, ts->abs_y_max, ts->max_button_num);
 
 #if MT_PROTOCOL_B
-	input_mt_init_slots(ts->input_dev, ts->max_touch_num, 0);
+	input_mt_init_slots(ts->input_dev, ts->max_touch_num, INPUT_MT_DIRECT);
+	input_set_abs_params(ts->input_dev, ABS_MT_TOOL_TYPE, 0, MT_TOOL_MAX, 0, 0);
 #endif
 
 	input_set_abs_params(ts->input_dev, ABS_MT_PRESSURE, 0, TOUCH_FORCE_NUM, 0, 0);    //pressure = TOUCH_FORCE_NUM
@@ -3239,6 +3284,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 
 /* Force stylus enabled by default on boot; SPI payload is sent after firmware load */
 	ts->pen_input_dev_enable = 1;
+	ts->palm_contacts_mask = 0;
+	ts->fingers_currently_down = false;
+	ts->pen_last_seen = 0;
+	ts->pen_last_valid_x = 0;
+	ts->pen_last_valid_y = 0;
+	ts->pen_spike_count = 0;
 
 #if BOOT_UPDATE_FIRMWARE
 	nvt_fwu_wq = alloc_workqueue("nvt_fwu_wq", WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
@@ -3381,6 +3432,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 	bTouchIsAwake = 1;
+	ts->palm_contacts_mask = 0;
+	ts->fingers_currently_down = false;
+	ts->pen_last_seen = 0;
+	ts->pen_last_valid_x = 0;
+	ts->pen_last_valid_y = 0;
+	ts->pen_spike_count = 0;
 	NVT_LOG("end\n");
 
 	/* Create /sys/touchpanel/ directory and nodes */
@@ -3743,6 +3800,12 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	input_mt_sync(ts->input_dev);
 #endif
 	input_sync(ts->input_dev);
+	ts->palm_contacts_mask = 0;
+	ts->fingers_currently_down = false;
+	ts->pen_last_seen = 0;
+	ts->pen_last_valid_x = 0;
+	ts->pen_last_valid_y = 0;
+	ts->pen_spike_count = 0;
 
 	msleep(50);
 	/* release pen event */
@@ -3823,6 +3886,12 @@ static int32_t nvt_ts_resume(struct device *dev)
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
 	bTouchIsAwake = 1;
+	ts->palm_contacts_mask = 0;
+	ts->fingers_currently_down = false;
+	ts->pen_last_seen = 0;
+	ts->pen_last_valid_x = 0;
+	ts->pen_last_valid_y = 0;
+	ts->pen_spike_count = 0;
 
 	mutex_unlock(&ts->lock);
 
