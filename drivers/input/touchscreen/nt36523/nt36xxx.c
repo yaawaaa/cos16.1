@@ -1204,7 +1204,6 @@ static void release_pen_event(void) {
 		ts->pen_last_valid_x = 0;
 		ts->pen_last_valid_y = 0;
 		ts->pen_spike_count = 0;
-		ts->pen_last_seen = 0;
 	}
 }
 
@@ -1810,6 +1809,10 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 		goto XFER_ERROR;
 	}
 
+#if NVT_TOUCH_ESD_PROTECT
+	irq_timer = jiffies;
+#endif
+
 #if NVT_TOUCH_WDT_RECOVERY
 	/* ESD protect by WDT */
 	if (nvt_wdt_fw_recovery(point_data)) {
@@ -1856,12 +1859,23 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: hold for 600ms across normal writing pauses */
-	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
-		if (point_data[66] != 0xFF)
-			ts->pen_last_seen = jiffies;
+/* 1. Proximity & hover palm window: hold for 1200ms across normal writing pauses */
+	bool current_pen_in_range = false;
+	bool current_pen_down = false;
 
-		if (ts->pen_last_seen && time_before(jiffies, ts->pen_last_seen + msecs_to_jiffies(600)))
+	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
+		if (point_data[66] == 0x01) {
+			current_pen_in_range = true;
+			if ((point_data[71] != 0) || (point_data[72] != 0))
+				current_pen_down = true;
+			ts->pen_last_seen = jiffies;
+		} else if (point_data[66] != 0xFF) {
+			/* Other non-0xFF pen packets like 0xF0 */
+			current_pen_in_range = true;
+			ts->pen_last_seen = jiffies;
+		}
+
+		if (ts->pen_last_seen && time_before(jiffies, ts->pen_last_seen + msecs_to_jiffies(1200)))
 			pen_suppress_palm = true;
 	} else {
 		ts->pen_last_seen = 0;
@@ -1961,13 +1975,28 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif
 
 		/* Palm detection:
-		 * 1. Contact arrived or active while pen is hovering/writing
-		 * 2. Or contact area is abnormally large (>= 22) typical of palm contact
+		 * 1. Contact was already classified as palm (stays latched until lifted)
+		 * 2. Or pen is touching down or hovering (active writing)
+		 * 3. Or contact area is >= 12 (typical of palm contact on Nabu, fingers are 5-9)
+		 * 4. Or another palm contact is already active on screen (same resting hand)
+		 * 5. Or pen was seen recently within 1200ms and contact area is >= 10
 		 */
-		if (pen_suppress_palm || (slot_w[i] >= 22))
-			ts->palm_contacts_mask |= slot_bit;
+		bool is_palm = false;
 
 		if (ts->palm_contacts_mask & slot_bit) {
+			is_palm = true;
+		} else if (current_pen_down || pen_is_down || current_pen_in_range || pen_in_range) {
+			is_palm = true;
+		} else if (slot_w[i] >= 12) {
+			is_palm = true;
+		} else if (ts->palm_contacts_mask != 0) {
+			is_palm = true;
+		} else if (pen_suppress_palm && (slot_w[i] >= 10)) {
+			is_palm = true;
+		}
+
+		if (is_palm) {
+			ts->palm_contacts_mask |= slot_bit;
 			/* Palm contact: report as MT_TOOL_PALM so Android inputflinger rejects it */
 			palm_cnt++;
 #if MT_PROTOCOL_B
