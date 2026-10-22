@@ -99,6 +99,9 @@ extern int dsi_panel_lockdown_info_read(unsigned char *plockdowninfo);
 extern void dsi_panel_doubleclick_enable(bool on);
 extern int pen_charge_state_notifier_register_client(struct notifier_block *nb);
 extern int pen_charge_state_notifier_unregister_client(struct notifier_block *nb);
+#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
+int32_t nvt_check_palm(uint8_t input_id, uint8_t *data);
+#endif
 
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; //read from dtsi
