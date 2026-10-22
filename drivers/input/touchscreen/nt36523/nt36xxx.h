@@ -234,6 +234,8 @@ struct nvt_ts_data {
 	uint32_t pen_last_valid_x;
 	uint32_t pen_last_valid_y;
 	int pen_spike_count;
+	bool pen_is_down;
+	bool pen_in_range;
 	int gesture_command_delayed;
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
