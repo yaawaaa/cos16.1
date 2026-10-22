@@ -229,7 +229,6 @@ struct nvt_ts_data {
 	struct completion dev_pm_suspend_completion;
 	bool palm_sensor_switch;
 	uint16_t palm_contacts_mask;
-	uint16_t finger_contacts_mask;
 	bool fingers_currently_down;
 	unsigned long pen_last_seen;
 	uint32_t pen_last_valid_x;
