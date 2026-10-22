@@ -228,6 +228,12 @@ struct nvt_ts_data {
 	bool dev_pm_suspend;
 	struct completion dev_pm_suspend_completion;
 	bool palm_sensor_switch;
+	uint16_t palm_contacts_mask;
+	bool fingers_currently_down;
+	unsigned long pen_last_seen;
+	uint32_t pen_last_valid_x;
+	uint32_t pen_last_valid_y;
+	int pen_spike_count;
 	int gesture_command_delayed;
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
