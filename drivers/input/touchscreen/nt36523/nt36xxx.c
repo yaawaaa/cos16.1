@@ -1856,16 +1856,13 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 #endif
 
-/* 1. Proximity & hover palm window: active while pen reports or recently seen */
+/* 1. Proximity & hover palm window: hold for 600ms across normal writing pauses */
 	if (ts->pen_support && ts->pen_input_dev_enable && !(ts->pen_is_charge)) {
-		if (point_data[66] == 0x01) {
-			pen_suppress_palm = true;
+		if (point_data[66] != 0xFF)
 			ts->pen_last_seen = jiffies;
-		} else if (pen_in_range || pen_is_down) {
-			/* Debounce missing frames while pen was active */
-			if (ts->pen_last_seen && time_before(jiffies, ts->pen_last_seen + msecs_to_jiffies(150)))
-				pen_suppress_palm = true;
-		}
+
+		if (ts->pen_last_seen && time_before(jiffies, ts->pen_last_seen + msecs_to_jiffies(600)))
+			pen_suppress_palm = true;
 	} else {
 		ts->pen_last_seen = 0;
 	}
@@ -1940,13 +1937,22 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 		if (!slot_active[i]) {
 			/* Contact physically lifted: clear from palm mask and release slot */
-			ts->palm_contacts_mask &= ~slot_bit;
+			if (ts->palm_contacts_mask & slot_bit) {
+				ts->palm_contacts_mask &= ~slot_bit;
 #if MT_PROTOCOL_B
-			input_mt_slot(ts->input_dev, i);
-			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_PALM, false);
 #endif
+			} else {
+#if MT_PROTOCOL_B
+				input_mt_slot(ts->input_dev, i);
+				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
+				input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
+				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+#endif
+			}
 			continue;
 		}
 
@@ -1962,13 +1968,15 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			ts->palm_contacts_mask |= slot_bit;
 
 		if (ts->palm_contacts_mask & slot_bit) {
-			/* Palm contact: suppress touch in Protocol B so Android ignores it */
+			/* Palm contact: report as MT_TOOL_PALM so Android inputflinger rejects it */
 			palm_cnt++;
 #if MT_PROTOCOL_B
 			input_mt_slot(ts->input_dev, i);
-			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, 0);
-			input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+			input_mt_report_slot_state(ts->input_dev, MT_TOOL_PALM, true);
+			input_report_abs(ts->input_dev, ABS_MT_POSITION_X, slot_x[i]);
+			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y, slot_y[i]);
+			input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, slot_w[i]);
+			input_report_abs(ts->input_dev, ABS_MT_PRESSURE, slot_p[i]);
 #endif
 		} else {
 			/* Genuine finger contact */
