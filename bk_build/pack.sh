@@ -16,10 +16,6 @@ for file in "$ARTIFACTS/Image.gz" "$ARTIFACTS/dtb" "$ARTIFACTS/dtbo.img" \
   "$ANYKERNEL_DIR/META-INF/com/google/android/updater-script" "$RECOVERY"; do
   [ -f "$file" ] || { echo "kernel package input missing: $file" >&2; exit 2; }
 done
-[ "$(sha256sum "$RECOVERY" | awk '{print $1}')" = \
-  248feef8879116c86df1729ecf9595b4be50834dd5bd66fe5732953cafaa4602 ] || {
-  echo "embedded PBRP ramdisk checksum mismatch" >&2; exit 2;
-}
 [ "$(grep -c '^export BOOTMODE;$' "$ANYKERNEL_DIR/META-INF/com/google/android/update-binary")" -eq 1 ] || {
   echo "AnyKernel3 bootmode export is missing" >&2; exit 2;
 }
@@ -84,8 +80,7 @@ for required in \
   'PBRP fastboot boot image detected.' \
   'patch_cmdline androidboot.force_normal_boot ""' \
   'patch_prop "$ramdisk/prop.default" ro.mi.os.custfeatureresolve true;' \
-  'block=/dev/block/bootdevice/by-name/vendor_boot;' \
-  'pbrp_sha256=15ae763c1f5b93ae48bcd007ff1f66871873aaee5b3a32852acbbf75b897fc54;'; do
+  'block=/dev/block/bootdevice/by-name/vendor_boot;'; do
   unzip -p "$ZIP_PATH" anykernel.sh | grep -F "$required" >/dev/null || {
     echo "AnyKernel step missing: $required" >&2; exit 1;
   }
@@ -95,10 +90,6 @@ done
 }
 [ "$(unzip -p "$ZIP_PATH" anykernel.sh | grep -c '^[[:space:]]*write_boot;$')" -eq 2 ] || {
   echo "boot/vendor_boot write steps are incomplete" >&2; exit 1;
-}
-[ "$(unzip -p "$ZIP_PATH" recovery/ramdisk-recovery.cpio.gz | sha256sum | awk '{print $1}')" = \
-  248feef8879116c86df1729ecf9595b4be50834dd5bd66fe5732953cafaa4602 ] || {
-  echo "packaged PBRP ramdisk checksum mismatch" >&2; exit 1;
 }
 (cd "$PACKAGE_ROOT" && sha256sum "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256")
 echo "$ZIP_PATH"

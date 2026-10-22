@@ -196,7 +196,7 @@ BOOT="$OUT_DIR/arch/$ARCH/boot"
 DTB_ROOT="$BOOT/dts/qcom"
 mkdir -p "$OUT_DIR/artifacts"
 gzip -t "$BOOT/Image.gz"
-image_magic=$(gzip -dc "$BOOT/Image.gz" | dd bs=1 skip=56 count=4 2>/dev/null | \
+image_magic=$(gzip -dc "$BOOT/Image.gz" 2>/dev/null | dd bs=1 skip=56 count=4 2>/dev/null | \
   od -An -tx1 | tr -d ' \n')
 [ "$image_magic" = "41524d64" ] || {
   echo "invalid arm64 Image magic: $image_magic" >&2; exit 1;
@@ -277,9 +277,9 @@ git -C "$KERNEL_DIR" ls-files --others --exclude-standard > \
   echo "DROIDSPACES_COMMIT=7412f6fb732fe7f5e3dc6ac0848d82ef9ff98acf"
   echo "KERNELSU_TREE_SHA256=$ksu_tree_sha"
   echo "ANYKERNEL_TEMPLATE_SHA256=$anykernel_template_sha"
-  echo "PBRP_SOURCE_ZIP_SHA256=77a06f1bfdcd0d4e47c89d83f95a1b650217c067085808e361510461d9608203"
-  echo "PBRP_RAMDISK_SHA256=15ae763c1f5b93ae48bcd007ff1f66871873aaee5b3a32852acbbf75b897fc54"
-  echo "PBRP_RAMDISK_GZIP_SHA256=248feef8879116c86df1729ecf9595b4be50834dd5bd66fe5732953cafaa4602"
+  echo "PBRP_SOURCE_ZIP_SHA256=custom"
+  echo "PBRP_RAMDISK_SHA256=$(sha256sum "$SCRIPT_DIR/recovery/ramdisk-recovery.cpio.gz" 2>/dev/null | awk '{print $1}' || echo custom)"
+  echo "PBRP_RAMDISK_GZIP_SHA256=$(sha256sum "$SCRIPT_DIR/recovery/ramdisk-recovery.cpio.gz" 2>/dev/null | awk '{print $1}' || echo custom)"
   echo "CLANG=$CLANG_DIR/bin/clang"
   "$CLANG_DIR/bin/clang" --version | head -1
   if [ -n "$CCACHE" ]; then

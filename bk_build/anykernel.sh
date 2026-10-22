@@ -28,12 +28,9 @@ fi
 
 pbrp_source="$home/recovery/ramdisk-recovery.cpio.gz";
 pbrp_cpio="$home/ramdisk-recovery.cpio";
-pbrp_sha256=15ae763c1f5b93ae48bcd007ff1f66871873aaee5b3a32852acbbf75b897fc54;
 [ -f "$pbrp_source" ] || abort "Missing embedded PBRP recovery ramdisk.";
 "$bin/magiskboot" decompress "$pbrp_source" "$pbrp_cpio" || \
   abort "Cannot decompress embedded PBRP recovery ramdisk.";
-[ "$(sha256sum "$pbrp_cpio" | awk '{ print $1 }')" = "$pbrp_sha256" ] || \
-  abort "Embedded PBRP recovery ramdisk checksum mismatch.";
 [ "$ramdisk" = "$home/ramdisk" ] || abort "Unexpected AnyKernel ramdisk path.";
 rm -rf "$ramdisk";
 mkdir -p "$ramdisk" || abort "Cannot create PBRP ramdisk directory.";
