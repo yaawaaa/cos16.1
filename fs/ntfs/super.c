@@ -1790,17 +1790,8 @@ static bool load_system_files(ntfs_volume *vol)
 
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						!vol->mftmirr_ino ? es1 : es2,
-						es3);
-				goto iput_mirr_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s",
+			ntfs_warning(sb, "%s.  Mounting read-only%s",
 					!vol->mftmirr_ino ? es1 : es2, es3);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
@@ -1929,16 +1920,8 @@ get_ctx_vol_failed:
 		}
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						es1, es2);
-				goto iput_vol_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+			ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
 					"read-write%s", es1, es2);
@@ -1962,20 +1945,8 @@ get_ctx_vol_failed:
 		es1 = !vol->logfile_ino ? es1a : es1b;
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						es1, es2);
-				if (vol->logfile_ino) {
-					BUG_ON(!rp);
-					ntfs_free(rp);
-				}
-				goto iput_logfile_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+			ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
 					"read-write%s", es1, es2);
@@ -2011,16 +1982,8 @@ get_ctx_vol_failed:
 		es1 = err < 0 ? es1a : es1b;
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						es1, es2);
-				goto iput_root_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+			ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
 					"read-write%s", es1, es2);
@@ -2034,14 +1997,7 @@ get_ctx_vol_failed:
 		static const char *es2 = ".  Run chkdsk.";
 
 		/* Convert to a read-only mount. */
-		if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-				ON_ERRORS_CONTINUE))) {
-			ntfs_error(sb, "%s and neither on_errors=continue nor "
-					"on_errors=remount-ro was specified%s",
-					es1, es2);
-			goto iput_root_err_out;
-		}
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+		ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		sb->s_flags |= MS_RDONLY;
 		/*
 		 * Do not set NVolErrors() because ntfs_remount() might manage
@@ -2061,14 +2017,7 @@ get_ctx_vol_failed:
 		static const char *es2 = ".  Run chkdsk.";
 
 		/* Convert to a read-only mount. */
-		if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-				ON_ERRORS_CONTINUE))) {
-			ntfs_error(sb, "%s and neither on_errors=continue nor "
-					"on_errors=remount-ro was specified%s",
-					es1, es2);
-			goto iput_root_err_out;
-		}
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+		ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		sb->s_flags |= MS_RDONLY;
 		NVolSetErrors(vol);
 	}
@@ -2121,16 +2070,8 @@ get_ctx_vol_failed:
 
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						es1, es2);
-				goto iput_quota_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+			ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
 					"read-write%s", es1, es2);
@@ -2143,14 +2084,7 @@ get_ctx_vol_failed:
 		static const char *es2 = ".  Run chkdsk.";
 
 		/* Convert to a read-only mount. */
-		if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-				ON_ERRORS_CONTINUE))) {
-			ntfs_error(sb, "%s and neither on_errors=continue nor "
-					"on_errors=remount-ro was specified%s",
-					es1, es2);
-			goto iput_quota_err_out;
-		}
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+		ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		sb->s_flags |= MS_RDONLY;
 		NVolSetErrors(vol);
 	}
@@ -2164,16 +2098,8 @@ get_ctx_vol_failed:
 
 		/* If a read-write mount, convert it to a read-only mount. */
 		if (!sb_rdonly(sb)) {
-			if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-					ON_ERRORS_CONTINUE))) {
-				ntfs_error(sb, "%s and neither on_errors="
-						"continue nor on_errors="
-						"remount-ro was specified%s",
-						es1, es2);
-				goto iput_usnjrnl_err_out;
-			}
 			sb->s_flags |= MS_RDONLY;
-			ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+			ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		} else
 			ntfs_warning(sb, "%s.  Will not be able to remount "
 					"read-write%s", es1, es2);
@@ -2187,14 +2113,7 @@ get_ctx_vol_failed:
 		static const char *es2 = ".  Run chkdsk.";
 
 		/* Convert to a read-only mount. */
-		if (!(vol->on_errors & (ON_ERRORS_REMOUNT_RO |
-				ON_ERRORS_CONTINUE))) {
-			ntfs_error(sb, "%s and neither on_errors=continue nor "
-					"on_errors=remount-ro was specified%s",
-					es1, es2);
-			goto iput_usnjrnl_err_out;
-		}
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
+		ntfs_warning(sb, "%s.  Mounting read-only%s", es1, es2);
 		sb->s_flags |= MS_RDONLY;
 		NVolSetErrors(vol);
 	}
