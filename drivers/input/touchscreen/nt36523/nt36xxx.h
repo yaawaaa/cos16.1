@@ -228,12 +228,6 @@ struct nvt_ts_data {
 	bool dev_pm_suspend;
 	struct completion dev_pm_suspend_completion;
 	bool palm_sensor_switch;
-	uint16_t palm_contacts_mask;
-	bool fingers_currently_down;
-	unsigned long pen_last_seen;
-	uint32_t pen_last_valid_x;
-	uint32_t pen_last_valid_y;
-	int pen_spike_count;
 	int gesture_command_delayed;
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
@@ -304,9 +298,6 @@ int32_t nvt_set_page(uint32_t addr);
 int32_t nvt_write_addr(uint32_t addr, uint8_t data);
 bool nvt_get_dbgfw_status(void);
 int32_t nvt_set_pocket_palm_switch(uint8_t pocket_palm_switch);
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-int32_t nvt_check_palm(uint8_t input_id, uint8_t *data);
-#endif
 #if NVT_TOUCH_ESD_PROTECT
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
