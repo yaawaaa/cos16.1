@@ -10653,13 +10653,10 @@ static void smblib_batt_verify_update_work(struct work_struct *work)
 	if (rc < 0) {
 		pr_err("Couldn't get batt verify status rc=%d\n", rc);
 	}
-	chg->batt_verified = pval.intval;
-	pr_err("batt_verified =%d\n", chg->batt_verified);
-	if (chg->batt_verified) {
-		vote(chg->fcc_votable, BATT_VERIFY_VOTER, false, 0);
-		count = 0;
-		return;
-	}
+	chg->batt_verified = 1;
+	vote(chg->fcc_votable, BATT_VERIFY_VOTER, false, 0);
+	count = 0;
+	return;
 	if (count < 3) {
 		count ++;
 		pr_err("battery verify failed, we will recheck it!\n");

@@ -4932,26 +4932,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 	switch (psp) {
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16_NABU
 	case POWER_SUPPLY_PROP_AUTHENTIC:
-		if (fg->fake_authentic != -EINVAL) {
-			pval->intval = fg->fake_authentic;
-			break;
-		}
-
-		if (fg->max_verify_psy == NULL)
-			return -ENODATA;
-                if (fg->max_verify_slave_psy == NULL)
-                        return -ENODATA;
-		rc = power_supply_get_property(fg->max_verify_psy,
-					POWER_SUPPLY_PROP_AUTHEN_RESULT, &b_val);
-                chip->battery_authentic_result = b_val.intval;
-                rc = power_supply_get_property(fg->max_verify_slave_psy,
-                                        POWER_SUPPLY_PROP_AUTHEN_RESULT, &b_val);
-                chip->battery_authentic_slave_result = b_val.intval;
-                if (chip->battery_authentic_result == 1 && chip->battery_authentic_slave_result == 1) {
-			pval->intval = 1;
-                } else {
-			pval->intval = 0;
-                }
+		pval->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_ROMID:
 		if (fg->max_verify_psy == NULL)
@@ -7281,7 +7262,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	fg->vbatt_full_volt_uv = 0;
 	fg->curr_cold_thermal_level = 1;
 	chip->calib_level = -EINVAL;
-	fg->fake_authentic = -EINVAL;
+	fg->fake_authentic = 1;
 	fg->fake_chip_ok = -EINVAL;
 	fg->batt_fake_temp = -EINVAL;
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16_NABU

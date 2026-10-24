@@ -255,7 +255,7 @@ enum print_reason {
 /* used for bq charge pump solution */
 #define MAIN_CHARGER_ICL	2000000
 #define QC3_CHARGER_ICL		500000
-#define QC3P5_CHARGER_ICL	2000000
+#define QC3P5_CHARGER_ICL	3000000
 
 #define MAIN_CHARGER_STOP_ICL	50000
 #define ESR_WORK_TIME_2S	2000

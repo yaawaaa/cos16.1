@@ -63,8 +63,8 @@
 #define pr_info pr_err
 #endif
 
-#define BATT_MAX_CHG_VOLT		4400
-#define BATT_FAST_CHG_CURR		5400
+#define BATT_MAX_CHG_VOLT		4480
+#define BATT_FAST_CHG_CURR		6000
 #define	BUS_OVP_THRESHOLD		12000
 #define	BUS_OVP_ALARM_THRESHOLD		9500
 

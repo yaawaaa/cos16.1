@@ -2,12 +2,12 @@ qcom,5119583_xiaomi_k82_p86120aa1_8720mah_averaged_masterslave_apr8th2021 {
 	qcom,profile-revision = <24>;
 	/* #5119583_XIAOMI_K82_8720mAH_averaged_MasterSlave_Apr8th2021*/
 	qcom,max-voltage-uv = <4480000>;
-	qcom,fastchg-current-ma = <5900>;
+	qcom,fastchg-current-ma = <6000>;
 	qcom,jeita-fcc-ranges = <(-100)  0   820000
 				1  50   820000
 				51  100  2500000
 				101 150  5964000
-				151 480  5900000
+				151 480  6000000
 				481 590  4260000>;
 	qcom,jeita-fv-ranges = <(-100)   0   4450000
 				1   50   4450000
