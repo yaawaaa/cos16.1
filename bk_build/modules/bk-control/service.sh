@@ -71,5 +71,6 @@ printf '%s\n' "$!" > "$BK_KEYBOARD_PID_FILE"
     for spk in TL TR BL BR; do
         tinymix "${spk} Boost Target Voltage" 170 2>/dev/null || true
         tinymix "${spk} AMP PCM Gain" 20 2>/dev/null || true
+        tinymix "${spk} Digital PCM Volume" 913 2>/dev/null || true
     done
 ) &

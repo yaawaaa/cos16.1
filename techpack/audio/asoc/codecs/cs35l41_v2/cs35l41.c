@@ -940,6 +940,13 @@ static void cs35l41_set_vol(int vol, struct cs35l41_private *cs35l41)
 		goto exit;
 	}
 
+	/* Boost non-zero volume by +6 dB (48 steps) for unmistakable loudness increase */
+	if (vol > 0) {
+		vol += 48;
+		if (vol > CS35L41_MAX_PCM_VOL)
+			vol = CS35L41_MAX_PCM_VOL;
+	}
+
 	if (vol < CS35L41_ZERO_PCM_VOL)
 		/* PCM Volume is attenuation */
 		val = (unsigned int)(vol + CS35L41_AMP_PCM_VOL_MUTE);
