@@ -2585,6 +2585,10 @@ static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 				cs35l41->pdata.amp_gain_zc <<
 				CS35L41_AMP_GAIN_ZC_SHIFT);
 
+	/* Set amp gain to 20 dB (0x14) for maximum speaker output */
+	regmap_update_bits(cs35l41->regmap, CS35L41_AMP_GAIN_CTRL,
+			0x000003E0, 0x14 << 5);
+
 	if (cs35l41->pdata.bst_vctrl)
 		regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1,
 				CS35L41_BST_CTL_MASK, cs35l41->pdata.bst_vctrl);
@@ -2956,7 +2960,10 @@ static int cs35l41_handle_of_data(struct device *dev,
 				"Invalid Boost Voltage %u mV\n", val);
 			return -EINVAL;
 		}
-		pdata->bst_vctrl = ((val - 2550) / 100) + 1;
+		pdata->bst_vctrl = ((val - 2550) / 50) + 1;
+	} else {
+		/* Default to 11000 mV (11V boost) for maximum speaker loudness */
+		pdata->bst_vctrl = 0xAA;
 	}
 
 	ret = of_property_read_u32(np, "cirrus,boost-peak-milliamp", &val);
