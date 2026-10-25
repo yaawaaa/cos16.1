@@ -1405,12 +1405,89 @@ static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_output_dev, SND_SOC_NOPM, 0, 0,
 				  cs35l41_output_dev_text,
 				  cs35l41_output_dev_val);
 
+static int cs35l41_amp_gain_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	unsigned int val = 0;
+
+	regmap_read(cs35l41->regmap, CS35L41_AMP_GAIN_CTRL, &val);
+	val = (val >> 5) & 0x1F;
+	if (val < 20)
+		val = 20;
+
+	ucontrol->value.integer.value[0] = val;
+	return 0;
+}
+
+static int cs35l41_amp_gain_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	unsigned int val = ucontrol->value.integer.value[0];
+
+	if (val >= 18 || val == 0)
+		val = 20;
+	else
+		val += 2;
+	if (val > 20)
+		val = 20;
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_AMP_GAIN_CTRL,
+			   0x000003E0, val << 5);
+	cs35l41->ctl_cache[8] = (cs35l41->ctl_cache[8] & ~0x000003E0) | (val << 5);
+	return 0;
+}
+
+static int cs35l41_boost_target_get(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	unsigned int val = 0;
+
+	regmap_read(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1, &val);
+	val &= CS35L41_BST_CTL_MASK;
+	if (val == 0)
+		val = 0xAA;
+
+	ucontrol->value.integer.value[0] = val;
+	return 0;
+}
+
+static int cs35l41_boost_target_put(struct snd_kcontrol *kcontrol,
+				    struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	unsigned int val = ucontrol->value.integer.value[0];
+
+	if (val == 0 || val > 0xAA)
+		val = 0xAA;
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1,
+			   CS35L41_BST_CTL_MASK, val);
+	cs35l41->ctl_cache[12] = val;
+	return 0;
+}
+
 static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE_RANGE_EXT_TLV("Digital PCM Volume", SND_SOC_NOPM, 0, 0,
 				 CS35L41_MAX_PCM_VOL, 0, cs35l41_get_vol,
 				 cs35l41_put_vol, dig_vol_tlv),
-	SOC_SINGLE_TLV("AMP PCM Gain", CS35L41_AMP_GAIN_CTRL, 5, 0x14, 0,
-			amp_gain_tlv),
+	SOC_SINGLE_EXT_TLV("AMP PCM Gain", SND_SOC_NOPM, 0, 0x14, 0,
+			   cs35l41_amp_gain_get, cs35l41_amp_gain_put,
+			   amp_gain_tlv),
 	SOC_SINGLE_RANGE("ASPTX1 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 0,
 			 0, 7, 0),
 	SOC_SINGLE_RANGE("ASPTX2 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 8,
@@ -1472,14 +1549,16 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 static const struct snd_kcontrol_new cs35l41_bst_ctl[] = {
 	SOC_SINGLE("Boost Class-H Tracking Enable",
 		   CS35L41_BSTCVRT_VCTRL2, 0, 1, 0),
-	SOC_SINGLE("Boost Target Voltage", CS35L41_BSTCVRT_VCTRL1, 0, 0xAA, 0),
+	SOC_SINGLE_EXT("Boost Target Voltage", SND_SOC_NOPM, 0, 0xAA, 0,
+		       cs35l41_boost_target_get, cs35l41_boost_target_put),
 	SOC_SINGLE_EXT("Hibernate Force Wake", SND_SOC_NOPM, 0, 1, 0,
 		       cs35l41_hibernate_force_wake_get,
 		       cs35l41_hibernate_force_wake_put),
 };
 
 static const struct snd_kcontrol_new cs35l41_lv_ctl[] = {
-	SOC_SINGLE("Boost Target Voltage", CS35L41_BSTCVRT_VCTRL1, 0, 0x8C, 0),
+	SOC_SINGLE_EXT("Boost Target Voltage", SND_SOC_NOPM, 0, 0xAA, 0,
+		       cs35l41_boost_target_get, cs35l41_boost_target_put),
 };
 
 static const struct cs35l41_otp_map_element_t *
@@ -3196,6 +3275,8 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 	for (i = 0; i < CS35L41_CTRL_CACHE_SIZE; i++)
 		regmap_read(cs35l41->regmap, cs35l41_ctl_cache_regs[i],
 			    &cs35l41->ctl_cache[i]);
+	cs35l41->ctl_cache[12] = 0xAA;
+	cs35l41->ctl_cache[8] = (cs35l41->ctl_cache[8] & ~0x000003E0) | (0x14 << 5);
 
 	/* Disable interrupts */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
@@ -3309,6 +3390,11 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 		regmap_write(cs35l41->regmap,
 				cs35l41_ctl_cache_regs[i],
 				cs35l41->ctl_cache[i]);
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1,
+			   CS35L41_BST_CTL_MASK, 0xAA);
+	regmap_update_bits(cs35l41->regmap, CS35L41_AMP_GAIN_CTRL,
+			   0x000003E0, 0x14 << 5);
 
 	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000055);
 	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000AA);
@@ -3873,6 +3959,13 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	dev_info(cs35l41->dev, "Cirrus Logic CS35L41 (%x), Revision: %02X\n",
 			regid, reg_revid);
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1,
+			   CS35L41_BST_CTL_MASK, 0xAA);
+	regmap_update_bits(cs35l41->regmap, CS35L41_AMP_GAIN_CTRL,
+			   0x000003E0, 0x14 << 5);
+	cs35l41->ctl_cache[12] = 0xAA;
+	cs35l41->ctl_cache[8] = 0x00000293;
 
 	cs35l41->wq = create_singlethread_workqueue("cs35l41");
 	if (cs35l41->wq == NULL) {
