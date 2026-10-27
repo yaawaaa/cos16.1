@@ -73,4 +73,7 @@ printf '%s\n' "$!" > "$BK_KEYBOARD_PID_FILE"
         tinymix "${spk} AMP PCM Gain" 20 2>/dev/null || true
         tinymix "${spk} Digital PCM Volume" 913 2>/dev/null || true
     done
+    for bl_fc in /sys/class/backlight/*/full_current /sys/devices/platform/soc/*/*i2c/i2c-*/*-0011/full_current; do
+        [ -f "$bl_fc" ] && echo 249 > "$bl_fc" 2>/dev/null || true
+    done
 ) &

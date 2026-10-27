@@ -57,12 +57,43 @@ int ktz8866_write(u8 reg, u8 data)
 }
 EXPORT_SYMBOL(ktz8866_write);
 
+static ssize_t full_current_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	u8 val = 0;
+	u32 code, ma_x10;
+
+	ktz8866_read(KTZ8866_DISP_FULL_CURRENT, &val);
+	code = (val >> 3) & 0x1f;
+	ma_x10 = 52 + code * 8;
+	return scnprintf(buf, PAGE_SIZE, "0x%02x (%u.%u mA)\n",
+			 val, ma_x10 / 10, ma_x10 % 10);
+}
+
+static ssize_t full_current_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	unsigned int val;
+	if (kstrtouint(buf, 0, &val) == 0) {
+		ktz8866_write(KTZ8866_DISP_FULL_CURRENT, (u8)val);
+	}
+	return count;
+}
+static DEVICE_ATTR_RW(full_current);
+
 static int ktz8866_backlight_update_status(struct backlight_device *backlight)
 {
 	//struct ktz8866 *bd = bl_get_data(backlight);
 	int exponential_bl = backlight->props.brightness;
 	int brightness = 0;
 	u8 v[2];
+
+	if (exponential_bl < 0)
+		exponential_bl = 0;
+	if (exponential_bl > BL_LEVEL_MAX)
+		exponential_bl = BL_LEVEL_MAX;
+
 	brightness = bl_level_remap[exponential_bl];
 	//brightness = exponential_bl;
 
@@ -74,6 +105,7 @@ static int ktz8866_backlight_update_status(struct backlight_device *backlight)
 	dev_warn(&bd->client->dev,
 		"ktz8866 backlight 0x%02x ,exponential brightness %d \n", brightness, exponential_bl);
 	if (!g_ktz8866_led.ktz8866_status && brightness > 0) {
+		ktz8866_write(KTZ8866_DISP_FULL_CURRENT, 0xf9);
 		ktz8866_write(KTZ8866_DISP_BL_ENABLE, 0x5f);
 		g_ktz8866_led.ktz8866_status = 1;
 		dev_warn(&bd->client->dev, "ktz8866 backlight enable,dimming close");
@@ -211,6 +243,10 @@ static int ktz8866_probe(struct i2c_client *client,
 		"ktz8866 i2c_set_clientdata \n");
 	i2c_set_clientdata(client, backlight);
 
+	ret = device_create_file(&backlight->dev, &dev_attr_full_current);
+	if (ret)
+		dev_warn(&client->dev, "failed to create full_current sysfs node\n");
+
 	parse_dt(&client->dev, bd->pdata);
 	dev_warn(&client->dev,
 		"ktz8866 parse_dt \n");
@@ -237,6 +273,7 @@ static int ktz8866_remove(struct i2c_client *client)
 {
 	struct backlight_device *backlight = i2c_get_clientdata(client);
 
+	device_remove_file(&backlight->dev, &dev_attr_full_current);
 	backlight->props.brightness = 0;
 	backlight_update_status(backlight);
 

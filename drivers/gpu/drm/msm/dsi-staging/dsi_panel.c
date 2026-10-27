@@ -873,7 +873,10 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	}
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
-		rc = backlight_device_set_brightness(bl->raw_bd, bl_temp);
+		if (!bl->raw_bd)
+			bl->raw_bd = backlight_device_get_by_type(BACKLIGHT_RAW);
+		if (bl->raw_bd)
+			rc = backlight_device_set_brightness(bl->raw_bd, bl_temp);
 		break;
 	case DSI_BACKLIGHT_DCS:
 		if (panel->fod_backlight_flag) {
@@ -888,6 +891,12 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		rc = dsi_panel_update_pwm_backlight(panel, bl_lvl);
 		break;
 	default:
+		if (!bl->raw_bd)
+			bl->raw_bd = backlight_device_get_by_type(BACKLIGHT_RAW);
+		if (bl->raw_bd) {
+			rc = backlight_device_set_brightness(bl->raw_bd, bl_temp);
+			break;
+		}
 		pr_err("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
 	}

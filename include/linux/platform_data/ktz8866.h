@@ -67,7 +67,7 @@ static struct ktz8866_reg ktz8866_regs_conf[] = {
 	{ KTZ8866_DISP_BB_LSB, 0x00 },/* LSB: limit I2C code 1360 DBV level*/
 	{ KTZ8866_DISP_BB_MSB, 0xAA },/* MSB: limit I2C code 1360 DBV level*/
 	{ KTZ8866_DISP_BC1,  0x33 },/* Backlight OVP 26.4V, exponential mapping*/
-	{ KTZ8866_DISP_FULL_CURRENT, 0xb1 },/* Backlight Full-scale LED Current 23mA*/
+	{ KTZ8866_DISP_FULL_CURRENT, 0xf9 },/* Backlight Full-scale LED Current 30mA (hardware boost)*/
 	{ KTZ8866_DISP_BC2, 0xbd },/* LED ramping time 128ms*/
 	{ KTZ8866_DISP_DIMMING, 0x11 },/* LED on/off ramping time 1ms*/
 	{ KTZ8866_DISP_BIAS_CONF1, 0x9f },/* OUTP and OUTN enabled via pin ENP and ENN*/
