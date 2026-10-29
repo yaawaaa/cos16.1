@@ -76,4 +76,13 @@ printf '%s\n' "$!" > "$BK_KEYBOARD_PID_FILE"
     for bl_fc in /sys/class/backlight/*/full_current /sys/devices/platform/soc/*/*i2c/i2c-*/*-0011/full_current; do
         [ -f "$bl_fc" ] && echo 249 > "$bl_fc" 2>/dev/null || true
     done
+    # Initialize virtual net device for OnePlus Communication Sharing if present
+    if [ -f /proc/sys/net/ovnet_dev/enable ]; then
+        echo 1 > /proc/sys/net/ovnet_dev/enable 2>/dev/null || true
+    fi
+    if [ -f /odm/bin/commcenterd ] || [ -f /system/odm/bin/commcenterd ] || [ -f /data/adb/bk-kernel/virtual_baseband ]; then
+        resetprop -n persist.radio.multisim.config dsds 2>/dev/null || true
+        resetprop -n ro.carrier wifi-only 2>/dev/null || true
+        start commcenterd 2>/dev/null || true
+    fi
 ) &
