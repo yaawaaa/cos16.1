@@ -39,13 +39,6 @@ setup_ufs_io()
 
 setup_extphone_stub()
 {
-	if [ -f /odm/bin/commcenterd ] || [ -f /system/odm/bin/commcenterd ] || \
-	   [ -f /data/adb/bk-kernel/virtual_baseband ] || \
-	   [ -f "$MODDIR/odm/bin/commcenterd" ] || \
-	   [ "$(getprop persist.radio.multisim.config 2>/dev/null)" = "dsds" ]; then
-		return 0
-	fi
-
 	BK_EXTPHONE_JAR=$MODDIR/telephony/extphonelib.jar
 	BK_EXTPHONE_EMPTY=$MODDIR/telephony/empty
 	[ -f "$BK_EXTPHONE_JAR" ] || return 0
